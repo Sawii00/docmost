@@ -11,6 +11,33 @@ interface D2ViewProps {
   props: NodeViewProps;
 }
 
+interface D2CompileError {
+  range?: string;
+  errmsg?: string;
+}
+
+// D2's compiler rejects with an Error whose `.message` is a JSON array of
+// { range, errmsg } objects — e.g.
+//   [{"range":"index,2:2:38-2:11:47","errmsg":"index:3:3: edge map keys ..."}]
+// Turn that into readable, line-prefixed text. Render/WASM errors come through
+// as plain strings, so fall back to the raw message whenever it isn't the
+// expected JSON array shape.
+function formatD2Error(message: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(message);
+  } catch {
+    return [message];
+  }
+  if (!Array.isArray(parsed)) return [message];
+  const lines = (parsed as D2CompileError[])
+    .map((e) => e?.errmsg)
+    .filter((m): m is string => typeof m === "string")
+    // "index:3:3: edge map keys ..." -> "Line 3: edge map keys ..."
+    .map((m) => m.replace(/^index:(\d+):\d+:\s*/, "Line $1: "));
+  return lines.length ? lines : [message];
+}
+
 // D2 built-in theme IDs. 0 is the neutral default (light); 200 is "Dark Mauve".
 const D2_LIGHT_THEME = 0;
 const D2_DARK_THEME = 200;
@@ -85,8 +112,11 @@ export default function D2View({ props }: D2ViewProps) {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : String(err);
         if (props.editor.isEditable) {
+          const lines = formatD2Error(message).map((line) =>
+            DOMPurify.sanitize(line),
+          );
           setPreview(
-            `<div class="${classes.error}">${t("D2 diagram error:")} ${DOMPurify.sanitize(message)}</div>`,
+            `<div class="${classes.error}">${t("D2 diagram error:")}<br>${lines.join("<br>")}</div>`,
           );
         } else {
           setPreview(

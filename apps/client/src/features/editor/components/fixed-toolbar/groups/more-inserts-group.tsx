@@ -17,6 +17,7 @@ import {
 } from "@tabler/icons-react";
 import IconExcalidraw from "@/components/icons/icon-excalidraw";
 import IconMermaid from "@/components/icons/icon-mermaid";
+import IconD2 from "@/components/icons/icon-d2";
 import IconDrawio from "@/components/icons/icon-drawio";
 import {
   AirtableIcon,
@@ -169,6 +170,19 @@ export const MoreInsertsGroup: FC<Props> = ({ editor, templateMode }) => {
           }
         >
           {t("Mermaid diagram")}
+        </Menu.Item>
+        <Menu.Item
+          leftSection={<IconD2 size={16} />}
+          onClick={() =>
+            editor
+              .chain()
+              .focus()
+              .setCodeBlock({ language: "d2" })
+              .insertContent("x -> y")
+              .run()
+          }
+        >
+          {t("D2 diagram")}
         </Menu.Item>
         {!templateMode && (
           <Menu.Item

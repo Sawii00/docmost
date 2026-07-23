@@ -12,6 +12,10 @@ const MermaidView = React.lazy(
   () => import("@/features/editor/components/code-block/mermaid-view.tsx"),
 );
 
+const D2View = React.lazy(
+  () => import("@/features/editor/components/code-block/d2-view.tsx"),
+);
+
 export default function CodeBlockView(props: NodeViewProps) {
   const { t } = useTranslation();
   const { node, updateAttributes, extension, editor, getPos } = props;
@@ -86,8 +90,11 @@ export default function CodeBlockView(props: NodeViewProps) {
       <pre
         spellCheck="false"
         hidden={
-          ((language === "mermaid" && !editor.isEditable) ||
-            (language === "mermaid" && !isSelected)) &&
+          // Diagram languages (mermaid, d2) hide their source and show a
+          // rendered preview when the block is read-only or unselected.
+          (((language === "mermaid" || language === "d2") &&
+            !editor.isEditable) ||
+            ((language === "mermaid" || language === "d2") && !isSelected)) &&
           node.textContent.length > 0
         }
       >
@@ -98,6 +105,12 @@ export default function CodeBlockView(props: NodeViewProps) {
       {language === "mermaid" && (
         <Suspense fallback={null}>
           <MermaidView props={props} />
+        </Suspense>
+      )}
+
+      {language === "d2" && (
+        <Suspense fallback={null}>
+          <D2View props={props} />
         </Suspense>
       )}
     </NodeViewWrapper>

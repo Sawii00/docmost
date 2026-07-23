@@ -22,7 +22,14 @@ const D2_DARK_THEME = 200;
 let d2InstancePromise: Promise<D2Type> | null = null;
 function getD2(): Promise<D2Type> {
   if (!d2InstancePromise) {
-    d2InstancePromise = import("@terrastruct/d2").then(({ D2 }) => new D2());
+    d2InstancePromise = import("@terrastruct/d2")
+      .then(({ D2 }) => new D2())
+      .catch((err) => {
+        // Don't cache a rejected load; otherwise every future D2 block would
+        // be stuck on the failure. Clearing it lets a later render retry.
+        d2InstancePromise = null;
+        throw err;
+      });
   }
   return d2InstancePromise;
 }
@@ -64,7 +71,16 @@ export default function D2View({ props }: D2ViewProps) {
           // Omit the <?xml ...?> tag so the SVG embeds cleanly inline.
           noXMLTag: true,
         });
-        if (!cancelled) setPreview(svg);
+        // D2 gives no XSS guarantee for its SVG output (unlike Mermaid's
+        // strict mode), and this goes into dangerouslySetInnerHTML in a
+        // collaborative doc, so sanitize it. D2 renders text/markdown labels
+        // inside <foreignObject> HTML, so the `html` profile is enabled
+        // alongside the svg profiles to preserve labels; DOMPurify still
+        // strips <script>, on* handlers, and javascript:/dangerous URIs.
+        const clean = DOMPurify.sanitize(svg, {
+          USE_PROFILES: { svg: true, svgFilters: true, html: true },
+        });
+        if (!cancelled) setPreview(clean);
       } catch (err) {
         if (cancelled) return;
         const message = err instanceof Error ? err.message : String(err);

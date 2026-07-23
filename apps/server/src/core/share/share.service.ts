@@ -46,8 +46,9 @@ export class ShareService {
       throw new NotFoundException('Share not found');
     }
 
-    const isRestricted =
-      await this.pagePermissionRepo.hasRestrictedAncestor(share.pageId);
+    const isRestricted = await this.pagePermissionRepo.hasRestrictedAncestor(
+      share.pageId,
+    );
     if (isRestricted) {
       throw new NotFoundException('Share not found');
     }
@@ -73,14 +74,26 @@ export class ShareService {
   }) {
     const { authUserId, workspaceId, page, createShareDto } = opts;
 
-    try {
-      const shares = await this.shareRepo.findByPageId(page.id);
-      if (shares) {
-        return shares;
-      }
+    const existing = await this.shareRepo.findByPageId(page.id);
+    if (existing) {
+      return existing;
+    }
 
+    // Optional custom slug. The random `key` is always generated and remains
+    // the permanent identifier; the slug is just a pretty per-workspace alias.
+    let slug: string | undefined;
+    const rawSlug = createShareDto.slug?.trim();
+    if (rawSlug) {
+      if (await this.shareRepo.slugExists(rawSlug, workspaceId)) {
+        throw new BadRequestException('This share slug is already in use');
+      }
+      slug = rawSlug;
+    }
+
+    try {
       return await this.shareRepo.insertShare({
         key: nanoIdGen().toLowerCase(),
+        slug,
         pageId: page.id,
         includeSubPages: createShareDto.includeSubPages ?? false,
         searchIndexing: createShareDto.searchIndexing ?? false,
@@ -89,21 +102,56 @@ export class ShareService {
         workspaceId,
       });
     } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       this.logger.error(err);
       throw new BadRequestException('Failed to share page');
     }
   }
 
-  async updateShare(shareId: string, updateShareDto: UpdateShareDto) {
+  async updateShare(
+    shareId: string,
+    updateShareDto: UpdateShareDto,
+    workspaceId?: string,
+    currentSlug?: string | null,
+  ) {
+    const update: {
+      includeSubPages?: boolean;
+      searchIndexing?: boolean;
+      slug?: string | null;
+    } = {
+      includeSubPages: updateShareDto.includeSubPages,
+      searchIndexing: updateShareDto.searchIndexing,
+    };
+
+    // Only touch the slug when the caller explicitly sent the field. An empty
+    // or null value clears it; a non-empty value is validated for collisions
+    // (unless it's unchanged, case-insensitively, for this same share).
+    if (updateShareDto.slug !== undefined) {
+      const trimmed =
+        typeof updateShareDto.slug === 'string'
+          ? updateShareDto.slug.trim()
+          : '';
+
+      if (trimmed.length > 0) {
+        const isUnchanged =
+          trimmed.toLowerCase() === (currentSlug ?? '').toLowerCase();
+        if (
+          !isUnchanged &&
+          workspaceId &&
+          (await this.shareRepo.slugExists(trimmed, workspaceId))
+        ) {
+          throw new BadRequestException('This share slug is already in use');
+        }
+        update.slug = trimmed;
+      } else {
+        update.slug = null;
+      }
+    }
+
     try {
-      return this.shareRepo.updateShare(
-        {
-          includeSubPages: updateShareDto.includeSubPages,
-          searchIndexing: updateShareDto.searchIndexing,
-        },
-        shareId,
-      );
+      return await this.shareRepo.updateShare(update, shareId);
     } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       this.logger.error(err);
       throw new BadRequestException('Failed to update share');
     }
@@ -126,8 +174,9 @@ export class ShareService {
     }
 
     // Block access to restricted pages
-    const isRestricted =
-      await this.pagePermissionRepo.hasRestrictedAncestor(page.id);
+    const isRestricted = await this.pagePermissionRepo.hasRestrictedAncestor(
+      page.id,
+    );
     if (isRestricted) {
       throw new NotFoundException('Shared page not found');
     }
@@ -153,6 +202,7 @@ export class ShareService {
             sql`0`.as('level'),
             'shares.id as shareId',
             'shares.key as shareKey',
+            'shares.slug as shareSlug',
             'shares.includeSubPages',
             'shares.searchIndexing',
             'shares.creatorId',
@@ -177,6 +227,7 @@ export class ShareService {
                   sql`ph.level + 1`.as('level'),
                   's.id as shareId',
                   's.key as shareKey',
+                  's.slug as shareSlug',
                   's.includeSubPages',
                   's.searchIndexing',
                   's.creatorId',
@@ -206,6 +257,7 @@ export class ShareService {
     return {
       id: share.shareId,
       key: share.shareKey,
+      slug: share.shareSlug,
       includeSubPages: share.includeSubPages,
       searchIndexing: share.searchIndexing,
       pageId: share.id,

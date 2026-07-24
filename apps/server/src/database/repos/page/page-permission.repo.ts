@@ -493,6 +493,28 @@ export class PagePermissionRepo {
   }
 
   /**
+   * Drop this user's memoized canUserEditPage results for the given pages.
+   *
+   * canUserEditPage is cached for PERMISSION_CACHE_TTL_MS, which is fine for
+   * permission changes that self-heal, but not for an action whose own
+   * response must already reflect the change — locking a page would otherwise
+   * report the pre-lock canEdit for up to 5s and leave the acting user's
+   * editor writable. Other users still self-heal on the TTL.
+   */
+  async invalidateCanEditCache(
+    userId: string,
+    pageIds: string[],
+  ): Promise<void> {
+    await Promise.all(
+      pageIds.map((pageId) =>
+        this.cacheManager
+          .del(CacheKey.PAGE_CAN_EDIT(userId, pageId))
+          .catch(() => undefined),
+      ),
+    );
+  }
+
+  /**
    * Get user's access level for a page.
    * Returns:
    * - hasDirectRestriction: whether this specific page has restrictions

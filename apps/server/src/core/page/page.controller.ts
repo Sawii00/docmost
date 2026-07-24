@@ -36,6 +36,7 @@ import {
 } from '../casl/interfaces/space-ability.type';
 import SpaceAbilityFactory from '../casl/abilities/space-ability.factory';
 import { PageRepo } from '@docmost/db/repos/page/page.repo';
+import { PagePermissionRepo } from '@docmost/db/repos/page/page-permission.repo';
 import { RecentPageDto } from './dto/recent-page.dto';
 import { CreatedByUserDto } from './dto/created-by-user.dto';
 import { DuplicatePageDto } from './dto/duplicate-page.dto';
@@ -60,6 +61,7 @@ export class PageController {
   constructor(
     private readonly pageService: PageService,
     private readonly pageRepo: PageRepo,
+    private readonly pagePermissionRepo: PagePermissionRepo,
     private readonly pageHistoryService: PageHistoryService,
     private readonly spaceAbility: SpaceAbilityFactory,
     private readonly pageAccessService: PageAccessService,
@@ -347,6 +349,11 @@ export class PageController {
     }
 
     await this.pageRepo.updatePages({ isLocked: dto.isLocked }, pageIds);
+
+    // The edit-permission chokepoint memoizes for 5s. Drop this user's entries
+    // so the response below — and therefore their editor — reflects the new
+    // lock state at once; everyone else self-heals on the TTL as usual.
+    await this.pagePermissionRepo.invalidateCanEditCache(user.id, pageIds);
 
     const updatedPage = await this.pageRepo.findById(page.id, {
       includeCreator: true,

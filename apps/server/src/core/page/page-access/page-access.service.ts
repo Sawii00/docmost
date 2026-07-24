@@ -53,7 +53,7 @@ export class PageAccessService {
       throw new ForbiddenException();
     }
 
-    const { hasAnyRestriction, canAccess, canEdit } =
+    const { hasRealRestriction, hasAnyRestriction, canAccess, canEdit } =
       await this.pagePermissionRepo.canUserEditPage(user.id, page.id);
 
     if (hasAnyRestriction && !canAccess) {
@@ -64,7 +64,11 @@ export class PageAccessService {
       canEdit: hasAnyRestriction
         ? canEdit
         : ability.can(SpaceCaslAction.Edit, SpaceCaslSubject.Page),
-      hasRestriction: hasAnyRestriction,
+      // Reported to the client as `permissions.hasRestriction`, where it gates
+      // public sharing. A page lock removes edit rights but must not make the
+      // page unshareable, so this reports only genuine page_access restrictions
+      // — enforcement above still routes on hasAnyRestriction.
+      hasRestriction: hasRealRestriction,
     };
   }
 
@@ -84,7 +88,7 @@ export class PageAccessService {
       throw new ForbiddenException();
     }
 
-    const { hasAnyRestriction, canEdit } =
+    const { hasRealRestriction, hasAnyRestriction, canEdit } =
       await this.pagePermissionRepo.canUserEditPage(user.id, page.id);
 
     if (hasAnyRestriction) {
@@ -99,7 +103,9 @@ export class PageAccessService {
       }
     }
 
-    return { hasRestriction: hasAnyRestriction };
+    // Client-facing flag: genuine restrictions only, never a lock (see
+    // validateCanViewWithPermissions).
+    return { hasRestriction: hasRealRestriction };
   }
 
   async validateCanComment(

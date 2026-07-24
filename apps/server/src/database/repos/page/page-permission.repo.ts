@@ -384,6 +384,14 @@ export class PagePermissionRepo {
     userId: string,
     pageId: string,
   ): Promise<{
+    /**
+     * A genuine page_access restriction exists on this page or an ancestor.
+     * Fork feature: unlike hasAnyRestriction, this is NOT set by a page lock —
+     * it is what the client means by "restricted" (e.g. public sharing is
+     * refused for restricted pages, but must stay allowed for locked ones).
+     */
+    hasRealRestriction: boolean;
+    /** Real restriction OR page lock — the flag that routes edit enforcement. */
     hasAnyRestriction: boolean;
     canAccess: boolean;
     canEdit: boolean;
@@ -438,17 +446,33 @@ export class PagePermissionRepo {
         );
         const isLocked = !!lock.rows[0]?.isLocked;
 
-        if (!row || row.canAccess === null) {
+        // A real (page_access) restriction, as opposed to the synthetic one a
+        // lock produces. Kept separate so "locked" never reads as "restricted"
+        // to callers that gate sharing rather than editing.
+        const hasRealRestriction = !!row && row.canAccess !== null;
+
+        if (!hasRealRestriction) {
           // No page_access restrictions on this page or its ancestors.
           if (isLocked) {
-            return { hasAnyRestriction: true, canAccess: true, canEdit: false };
+            return {
+              hasRealRestriction: false,
+              hasAnyRestriction: true,
+              canAccess: true,
+              canEdit: false,
+            };
           }
-          return { hasAnyRestriction: false, canAccess: true, canEdit: true };
+          return {
+            hasRealRestriction: false,
+            hasAnyRestriction: false,
+            canAccess: true,
+            canEdit: true,
+          };
         }
 
         // Has restricted ancestors; a lock can only further remove edit,
         // never grant access the restrictions already withhold.
         return {
+          hasRealRestriction: true,
           hasAnyRestriction: true,
           canAccess: row.canAccess,
           canEdit: row.canAccess && (row.canEdit ?? false) && !isLocked,

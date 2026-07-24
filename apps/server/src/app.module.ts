@@ -28,6 +28,7 @@ import { ClsModule } from 'nestjs-cls';
 import { NoopAuditModule } from './integrations/audit/audit.module';
 import { ThrottleModule } from './integrations/throttle/throttle.module';
 import { ApiKeyModule } from './core/api-key/api-key.module';
+import { McpModule } from './core/mcp/mcp.module';
 
 const enterpriseModules = [];
 try {
@@ -89,6 +90,9 @@ try {
     // Native (non-EE) API-keys module. Registered directly rather than through
     // the enterprise-submodule loader above.
     ApiKeyModule,
+    // Native (non-EE) read-only MCP server, gated by Feature.MCP + the
+    // per-workspace settings.ai.mcp toggle.
+    McpModule,
     ...enterpriseModules,
   ],
   controllers: [AppController],

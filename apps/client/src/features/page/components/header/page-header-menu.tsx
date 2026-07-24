@@ -54,6 +54,7 @@ import {
 import { formattedDate } from "@/lib/time.ts";
 import { PageEditModeToggle } from "@/features/user/components/page-state-pref.tsx";
 import MovePageModal from "@/features/page/components/move-page-modal.tsx";
+import LockPageModal from "@/features/page/components/lock-page-modal.tsx";
 import { useTimeAgo } from "@/hooks/use-time-ago.tsx";
 import { PageShareModal } from "@/ee/page-permission";
 import {
@@ -183,6 +184,10 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
     verificationOpened,
     { open: openVerificationModal, close: closeVerificationModal },
   ] = useDisclosure(false);
+  const [
+    lockPageModalOpened,
+    { open: openLockPageModal, close: closeLockPageModal },
+  ] = useDisclosure(false);
   const [pageEditor] = useAtom(pageEditorAtom);
   const pageUpdatedAt = useTimeAgo(page?.updatedAt);
   const favoriteIds = useFavoriteIds("page", page?.spaceId);
@@ -246,9 +251,13 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
     }
   };
 
-  const handleToggleLock = () => {
+  const handleToggleLock = (recursive: boolean) => {
     if (!page?.id) return;
-    lockPageMutation.mutate({ pageId: page.id, isLocked: !page.isLocked });
+    lockPageMutation.mutate({
+      pageId: page.id,
+      isLocked: !page.isLocked,
+      recursive,
+    });
   };
 
   return (
@@ -345,7 +354,7 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
                   <IconLock size={16} />
                 )
               }
-              onClick={handleToggleLock}
+              onClick={openLockPageModal}
             >
               {page?.isLocked ? t("Unlock page") : t("Lock page")}
             </Menu.Item>
@@ -446,6 +455,13 @@ function PageActionMenu({ readOnly }: PageActionMenuProps) {
         currentSpaceSlug={spaceSlug}
         onClose={closeMoveSpaceModal}
         open={movePageModalOpened}
+      />
+
+      <LockPageModal
+        opened={lockPageModalOpened}
+        isLocked={!!page?.isLocked}
+        onClose={closeLockPageModal}
+        onConfirm={handleToggleLock}
       />
 
       <PageVerificationModal

@@ -130,7 +130,10 @@ export default function PageHeaderMenu({ readOnly }: PageHeaderMenuProps) {
 
       {!readOnly && !page?.isBase && <PageEditModeToggle size="xs" />}
 
-      <PageShareModal readOnly={readOnly} />
+      {/* The share modal forwards `readOnly` to its publish controls only, and
+          publishing is lock-agnostic (see PageAccessService.validateCanManageShare),
+          so it gets its own signal rather than the editor's. */}
+      <PageShareModal readOnly={!(page?.permissions?.canManageShare ?? !readOnly)} />
 
       <Tooltip label={t("Comments")} openDelay={250} withArrow>
         <ActionIcon

@@ -395,6 +395,13 @@ export class PagePermissionRepo {
     hasAnyRestriction: boolean;
     canAccess: boolean;
     canEdit: boolean;
+    /**
+     * canEdit as it would be if the page were not locked. Fork feature: for
+     * actions that are authority over the page rather than a content edit
+     * (managing its public share), a frozen page must not lock out the people
+     * who could otherwise do them.
+     */
+    canEditIgnoringLock: boolean;
   }> {
     return withCache(
       this.cacheManager,
@@ -459,6 +466,7 @@ export class PagePermissionRepo {
               hasAnyRestriction: true,
               canAccess: true,
               canEdit: false,
+              canEditIgnoringLock: true,
             };
           }
           return {
@@ -466,16 +474,19 @@ export class PagePermissionRepo {
             hasAnyRestriction: false,
             canAccess: true,
             canEdit: true,
+            canEditIgnoringLock: true,
           };
         }
 
         // Has restricted ancestors; a lock can only further remove edit,
         // never grant access the restrictions already withhold.
+        const canEditIgnoringLock = row.canAccess && (row.canEdit ?? false);
         return {
           hasRealRestriction: true,
           hasAnyRestriction: true,
           canAccess: row.canAccess,
-          canEdit: row.canAccess && (row.canEdit ?? false) && !isLocked,
+          canEdit: canEditIgnoringLock && !isLocked,
+          canEditIgnoringLock,
         };
       },
     );

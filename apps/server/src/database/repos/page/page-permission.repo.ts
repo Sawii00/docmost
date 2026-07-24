@@ -423,26 +423,24 @@ export class PagePermissionRepo {
 
         const row = result.rows[0];
 
-        // Fork feature: page lock. A locked page is editable only by its owner
-        // (the page creator). Modeled here as a synthetic restriction so this
-        // single edit-permission chokepoint propagates the lock everywhere —
-        // REST (validateCanEdit), realtime collab (Hocuspocus readOnly), and the
-        // client permissions payload — without editing those call sites. It only
-        // ever removes edit rights; canAccess (view) is left untouched, so a
-        // locked page stays readable to everyone the space/page rules allow.
-        const lock = await sql<{
-          isLocked: boolean;
-          creatorId: string | null;
-        }>`SELECT is_locked AS "isLocked", creator_id AS "creatorId" FROM pages WHERE id = ${pageId}::uuid`.execute(
+        // Fork feature: page lock. A locked page is frozen — read-only for
+        // EVERYONE, including its creator — until it is explicitly unlocked.
+        // Modeled here as a synthetic restriction so this single edit-permission
+        // chokepoint propagates the lock everywhere — REST (validateCanEdit),
+        // realtime collab (Hocuspocus readOnly), and the client permissions
+        // payload — without editing those call sites. Unlocking is a separate,
+        // owner/admin-guarded action (POST /pages/lock) that does not depend on
+        // edit rights, so a lock can never strand the page. The lock only
+        // removes edit; canAccess (view) is left untouched, so a locked page
+        // stays readable to everyone the space/page rules allow.
+        const lock = await sql<{ isLocked: boolean }>`SELECT is_locked AS "isLocked" FROM pages WHERE id = ${pageId}::uuid`.execute(
           this.db,
         );
-        const lockRow = lock.rows[0];
-        const lockedForUser =
-          !!lockRow?.isLocked && lockRow.creatorId !== userId;
+        const isLocked = !!lock.rows[0]?.isLocked;
 
         if (!row || row.canAccess === null) {
           // No page_access restrictions on this page or its ancestors.
-          if (lockedForUser) {
+          if (isLocked) {
             return { hasAnyRestriction: true, canAccess: true, canEdit: false };
           }
           return { hasAnyRestriction: false, canAccess: true, canEdit: true };
@@ -453,7 +451,7 @@ export class PagePermissionRepo {
         return {
           hasAnyRestriction: true,
           canAccess: row.canAccess,
-          canEdit: row.canAccess && (row.canEdit ?? false) && !lockedForUser,
+          canEdit: row.canAccess && (row.canEdit ?? false) && !isLocked,
         };
       },
     );
